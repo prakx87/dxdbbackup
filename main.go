@@ -18,20 +18,17 @@ import (
 	"google.golang.org/api/option"
 )
 
-var databases = []string{}
-var dumpList = []string{}
-
 func main() {
 	fmt.Println("DX DB Backup Script")
 
 	// 1. List DBs for backups excluding default DBs
-	getDbList()
+	databases := getDbList()
 
 	// 2. Take DB dumps of mysql databases
-	takeDump()
+	dumpList := takeDump(databases)
 
 	// 3. Upload the DB dumps to Google Drive
-	uploadToCloud()
+	uploadToCloud(dumpList)
 
 	// 4. Cleanup older dumps
 }
@@ -57,6 +54,7 @@ func getDbList() []string {
 	fmt.Printf("List of All Databases: %v\n", allDbs)
 	// Create a list of Default DBs which needs to be ignored
 	defaultDbs := []string{"information_schema", "mysql", "performance_schema", "sys"}
+	databases := []string{}
 
 	for _, db := range allDbs {
 		if !slices.Contains(defaultDbs, db) {
@@ -68,8 +66,9 @@ func getDbList() []string {
 	return databases
 }
 
-func takeDump() {
+func takeDump(databases []string) []string {
 	//  mysqldump -h 127.0.0.1 -u root -pmy-secret-pw semaphore > dump.sql
+	dumpList := []string{}
 	for _, db := range databases {
 		dumpCmd := exec.Command("/usr/bin/mysqldump", "-h", "127.0.0.1", "-uroot", "-pmy-secret-pw", db)
 		// Create stdout io pipe in order to write output to file
@@ -79,8 +78,17 @@ func takeDump() {
 		}
 
 		// Create dump file
+		backupFolder := filepath.Join(".", "backups")
+		if _, err := os.Stat(backupFolder); os.IsNotExist(err) {
+			err := os.Mkdir(backupFolder, 0755)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
 		dumpName := fmt.Sprintf("dump_%s.sql", time.Now().Format("2006-01-02-150405"))
-		dumpFile, err := os.Create(dumpName)
+		dumpPath := fmt.Sprintf(backupFolder + "/" + dumpName)
+		dumpFile, err := os.Create(dumpPath)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -105,12 +113,13 @@ func takeDump() {
 		// Close the dump file after dump is completed
 		dumpFile.Close()
 
-		dumpList = append(dumpList, dumpName)
+		dumpList = append(dumpList, dumpPath)
 	}
+	return dumpList
 }
 
-func uploadToCloud() {
-	for _, dumpName := range dumpList {
+func uploadToCloud(dumpList []string) {
+	for _, dumpPath := range dumpList {
 		srv, err := drive.NewService(
 			context.Background(),
 			option.WithCredentialsFile("balmy-moonlight-196910-348c8ecd1dca.json"),
@@ -119,7 +128,7 @@ func uploadToCloud() {
 			log.Fatalf("Unable to retrieve Drive client: %v", err)
 		}
 
-		dumpFile, err := os.Open(dumpName)
+		dumpFile, err := os.Open(dumpPath)
 		if err != nil {
 			log.Fatal(err)
 		}
