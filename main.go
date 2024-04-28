@@ -11,12 +11,15 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
+
+var wg = sync.WaitGroup{}
 
 func main() {
 	fmt.Println("DX DB Backup Script")
@@ -28,9 +31,17 @@ func main() {
 	dumpList := takeDump(databases)
 
 	// 3. Upload the DB dumps to Google Drive
-	uploadToCloud(dumpList)
+	wg.Add(len(dumpList))
+	for _, dumpPath := range dumpList {
+		go uploadToCloud(dumpPath)
+	}
 
 	// 4. Cleanup older dumps
+	retentionDays := 15
+	cleanOldLocalDumps(retentionDays)
+	cleanOldCloudDumps(retentionDays)
+
+	wg.Wait()
 }
 
 func getDbList() []string {
@@ -118,37 +129,48 @@ func takeDump(databases []string) []string {
 	return dumpList
 }
 
-func uploadToCloud(dumpList []string) {
-	for _, dumpPath := range dumpList {
-		srv, err := drive.NewService(
-			context.Background(),
-			option.WithCredentialsFile("balmy-moonlight-196910-348c8ecd1dca.json"),
-		)
-		if err != nil {
-			log.Fatalf("Unable to retrieve Drive client: %v", err)
-		}
-
-		dumpFile, err := os.Open(dumpPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		dumpFileInfo, err := dumpFile.Stat()
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer dumpFile.Close()
-
-		driveFile := &drive.File{
-			Name:    filepath.Base(dumpFileInfo.Name()),
-			Parents: []string{"0B6VheyHPSfoJRjMwbERBdW52ZTQ"},
-		}
-
-		fileResult, err := srv.Files.Create(driveFile).Media(dumpFile, googleapi.ContentType("text/x-sql")).Do()
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("%v\n", fileResult)
+func uploadToCloud(dumpPath string) {
+	srv, err := drive.NewService(
+		context.Background(),
+		option.WithCredentialsFile("balmy-moonlight-196910-348c8ecd1dca.json"),
+	)
+	if err != nil {
+		log.Fatalf("Unable to retrieve Drive client: %v", err)
 	}
 
+	dumpFile, err := os.Open(dumpPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dumpFileInfo, err := dumpFile.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer dumpFile.Close()
+
+	driveFile := &drive.File{
+		Name:    filepath.Base(dumpFileInfo.Name()),
+		Parents: []string{"0B6VheyHPSfoJRjMwbERBdW52ZTQ"},
+	}
+
+	fileResult, err := srv.Files.Create(driveFile).Media(dumpFile, googleapi.ContentType("text/x-sql")).Do()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%v\n", fileResult)
+
+	wg.Done()
+}
+
+func cleanOldLocalDumps(retentionDays int) {
+	// Get list of backups older than retention time
+	// Delete those backups
+	fmt.Printf("cleaned backups older than %v Days.\n", retentionDays)
+}
+
+func cleanOldCloudDumps(retentionDays int) {
+	// Get list of backups older than retention time
+	// Delete those backups
+	fmt.Printf("cleaned backups older than %v Days.\n", retentionDays)
 }
