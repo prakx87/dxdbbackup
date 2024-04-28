@@ -37,9 +37,9 @@ func main() {
 	}
 
 	// 4. Cleanup older dumps
-	retentionDays := 15
-	cleanOldLocalDumps(retentionDays)
-	cleanOldCloudDumps(retentionDays)
+	retentionTime := "15h"
+	cleanOldLocalDumps(retentionTime)
+	cleanOldCloudDumps(retentionTime)
 
 	wg.Wait()
 }
@@ -163,14 +163,41 @@ func uploadToCloud(dumpPath string) {
 	wg.Done()
 }
 
-func cleanOldLocalDumps(retentionDays int) {
+func cleanOldLocalDumps(retentionTime string) {
 	// Get list of backups older than retention time
+	retention, err := time.ParseDuration(retentionTime)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Retention Time: %v\n", retention)
+
+	backupList, err := os.ReadDir("backups")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, backup := range backupList {
+		backupInfo, err := backup.Info()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Name: %v, Info: %v\n", backup.Name(), backupInfo.ModTime())
+
+		backupAge := time.Since(backupInfo.ModTime())
+		fmt.Printf("Backup Age: %v\n", backupAge.Abs())
+		if backupAge > retention {
+			err := os.Remove("backups/" + backup.Name())
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("File %v is deleted.\n", backup.Name())
+		}
+	}
 	// Delete those backups
-	fmt.Printf("cleaned backups older than %v Days.\n", retentionDays)
+	fmt.Printf("cleaned backups older than %v.\n", retentionTime)
 }
 
-func cleanOldCloudDumps(retentionDays int) {
+func cleanOldCloudDumps(retentionTime string) {
 	// Get list of backups older than retention time
 	// Delete those backups
-	fmt.Printf("cleaned backups older than %v Days.\n", retentionDays)
+	fmt.Printf("cleaned backups older than %v.\n", retentionTime)
 }
