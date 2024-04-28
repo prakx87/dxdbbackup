@@ -37,8 +37,8 @@ func main() {
 	}
 
 	// 4. Cleanup older dumps
-	retentionTime := "15h"
-	cleanOldLocalDumps(retentionTime)
+	retentionTime := "15m"
+	// cleanOldLocalDumps(retentionTime)
 	cleanOldCloudDumps(retentionTime)
 
 	wg.Wait()
@@ -175,6 +175,8 @@ func cleanOldLocalDumps(retentionTime string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Delete those backups
 	for _, backup := range backupList {
 		backupInfo, err := backup.Info()
 		if err != nil {
@@ -192,12 +194,28 @@ func cleanOldLocalDumps(retentionTime string) {
 			fmt.Printf("File %v is deleted.\n", backup.Name())
 		}
 	}
-	// Delete those backups
 	fmt.Printf("cleaned backups older than %v.\n", retentionTime)
 }
 
 func cleanOldCloudDumps(retentionTime string) {
 	// Get list of backups older than retention time
+	srv, err := drive.NewService(
+		context.Background(),
+		option.WithCredentialsFile("balmy-moonlight-196910-348c8ecd1dca.json"),
+	)
+	if err != nil {
+		log.Fatalf("Unable to retrieve Drive client: %v", err)
+	}
+
+	backupFiles, err := srv.Files.List().OrderBy("createdTime").Do()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, file := range backupFiles.Files {
+		fmt.Printf("Filename: %v, Created on: %v\n", file.Name, file.ImageMediaMetadata)
+	}
+
 	// Delete those backups
 	fmt.Printf("cleaned backups older than %v.\n", retentionTime)
 }
