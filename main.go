@@ -24,19 +24,17 @@ var wg = sync.WaitGroup{}
 func main() {
 	fmt.Println("DX DB Backup Script")
 
-	// // 1. List DBs for backups excluding default DBs
-	// databases := getDbList()
+	// 1. List DBs for backups excluding default DBs
+	databases := getDbList()
 
-	// // 2. Take DB dumps of mysql databases
-	// dumpList := takeDump(databases)
+	// Steps 2 to 4
+	wg.Add(len(databases))
+	for _, database := range databases {
+		takeBackup(database)
+	}
+	wg.Wait()
 
-	// // 3. Upload the DB dumps to Google Drive
-	// wg.Add(len(dumpList))
-	// for _, dumpPath := range dumpList {
-	// 	go uploadToCloud(dumpPath)
-	// }
-
-	// 4. Cleanup older dumps
+	// 5. Cleanup older dumps
 	retentionTime := "15m"
 	retention, err := time.ParseDuration(retentionTime)
 	if err != nil {
@@ -44,8 +42,15 @@ func main() {
 	}
 	// cleanOldLocalDumps(&retention)
 	cleanOldCloudDumps(&retention)
+}
 
-	// wg.Wait()
+func takeBackup(database string) {
+	// 2. Take DB dump of mysql database
+	dumpPath := takeDump(database)
+	// 3. Zip the DB Dump
+	// zipFilePath := zipDumpFile(dumpPath)
+	// 4. Upload the DB dumps to Google Drive
+	uploadToCloud(dumpPath)
 }
 
 func getDbList() []string {
@@ -81,56 +86,58 @@ func getDbList() []string {
 	return databases
 }
 
-func takeDump(databases []string) []string {
+func takeDump(database string) string {
 	//  mysqldump -h 127.0.0.1 -u root -pmy-secret-pw semaphore > dump.sql
-	dumpList := []string{}
-	for _, db := range databases {
-		dumpCmd := exec.Command("/usr/bin/mysqldump", "-h", "127.0.0.1", "-uroot", "-pmy-secret-pw", db)
-		// Create stdout io pipe in order to write output to file
-		stdOut, err := dumpCmd.StdoutPipe()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Create dump file
-		backupFolder := filepath.Join(".", "backups")
-		if _, err := os.Stat(backupFolder); os.IsNotExist(err) {
-			err := os.Mkdir(backupFolder, 0755)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		dumpName := fmt.Sprintf("dump_%s.sql", time.Now().Format("2006-01-02-150405"))
-		dumpPath := fmt.Sprintf(backupFolder + "/" + dumpName)
-		dumpFile, err := os.Create(dumpPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Create new Writer to write to Dump file
-		wDumpFile := bufio.NewWriter(dumpFile)
-		// Create new scanner to read from Stdout io pipe
-		scanner := bufio.NewScanner(stdOut)
-
-		// Run the DB Dump command
-		if err := dumpCmd.Start(); err != nil {
-			log.Fatal(err)
-		}
-
-		// Read each line from scanner and write the each line (string) to file
-		for scanner.Scan() {
-			if _, err := wDumpFile.WriteString(scanner.Text() + "\n"); err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		// Close the dump file after dump is completed
-		dumpFile.Close()
-
-		dumpList = append(dumpList, dumpPath)
+	dumpCmd := exec.Command("/usr/bin/mysqldump", "-h", "127.0.0.1", "-uroot", "-pmy-secret-pw", database)
+	// Create stdout io pipe in order to write output to file
+	stdOut, err := dumpCmd.StdoutPipe()
+	if err != nil {
+		log.Fatal(err)
 	}
-	return dumpList
+
+	// Create dump file
+	backupFolder := filepath.Join(".", "backups")
+	if _, err := os.Stat(backupFolder); os.IsNotExist(err) {
+		err := os.Mkdir(backupFolder, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	dumpName := fmt.Sprintf("dump_%s.sql", time.Now().Format("2006-01-02-150405"))
+	dumpPath := fmt.Sprintf(backupFolder + "/" + dumpName)
+	dumpFile, err := os.Create(dumpPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create new Writer to write to Dump file
+	wDumpFile := bufio.NewWriter(dumpFile)
+	// Create new scanner to read from Stdout io pipe
+	scanner := bufio.NewScanner(stdOut)
+
+	// Run the DB Dump command
+	if err := dumpCmd.Start(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Read each line from scanner and write the each line (string) to file
+	for scanner.Scan() {
+		if _, err := wDumpFile.WriteString(scanner.Text() + "\n"); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Close the dump file after dump is completed
+	dumpFile.Close()
+
+	return dumpPath
+}
+
+func zipDumpFile(dumpPath string) string {
+	fmt.Printf("Zipping File: %v\n", dumpPath)
+
+	return "zipFilePath"
 }
 
 func uploadToCloud(dumpPath string) {
