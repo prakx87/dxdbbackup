@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"log"
@@ -30,7 +31,14 @@ func main() {
 	// Steps 2 to 4
 	wg.Add(len(databases))
 	for _, database := range databases {
-		takeBackup(database)
+		go func(database string) {
+			// 2. Take DB dump of mysql database
+			dumpPath := takeDump(database)
+			// 3. Zip the DB Dump
+			zipPath := zipDumpFile(dumpPath)
+			// 4. Upload the DB dumps to Google Drive
+			uploadToCloud(zipPath)
+		}(database)
 	}
 	wg.Wait()
 
@@ -40,17 +48,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// cleanOldLocalDumps(&retention)
+	cleanOldLocalDumps(&retention)
 	cleanOldCloudDumps(&retention)
-}
-
-func takeBackup(database string) {
-	// 2. Take DB dump of mysql database
-	dumpPath := takeDump(database)
-	// 3. Zip the DB Dump
-	// zipFilePath := zipDumpFile(dumpPath)
-	// 4. Upload the DB dumps to Google Drive
-	uploadToCloud(dumpPath)
 }
 
 func getDbList() []string {
@@ -136,11 +135,29 @@ func takeDump(database string) string {
 
 func zipDumpFile(dumpPath string) string {
 	fmt.Printf("Zipping File: %v\n", dumpPath)
+	dumpData, err := os.ReadFile(dumpPath)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	return "zipFilePath"
+	zipPath := fmt.Sprintf(dumpPath + ".gz")
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer zipFile.Close()
+
+	wZipFile := gzip.NewWriter(zipFile)
+	if _, err := wZipFile.Write(dumpData); err != nil {
+		log.Fatal(err)
+	}
+	wZipFile.Flush()
+	wZipFile.Close()
+
+	return zipPath
 }
 
-func uploadToCloud(dumpPath string) {
+func uploadToCloud(zipPath string) {
 	srv, err := drive.NewService(
 		context.Background(),
 		option.WithCredentialsFile("balmy-moonlight-196910-348c8ecd1dca.json"),
@@ -149,23 +166,23 @@ func uploadToCloud(dumpPath string) {
 		log.Fatalf("Unable to retrieve Drive client: %v", err)
 	}
 
-	dumpFile, err := os.Open(dumpPath)
+	zipFile, err := os.Open(zipPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	dumpFileInfo, err := dumpFile.Stat()
+	zipFileInfo, err := zipFile.Stat()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dumpFile.Close()
+	defer zipFile.Close()
 
 	driveFile := &drive.File{
-		Name:    filepath.Base(dumpFileInfo.Name()),
+		Name:    filepath.Base(zipFileInfo.Name()),
 		Parents: []string{"0B6VheyHPSfoJRjMwbERBdW52ZTQ"},
 	}
 
-	fileResult, err := srv.Files.Create(driveFile).Media(dumpFile, googleapi.ContentType("text/x-sql")).Do()
+	fileResult, err := srv.Files.Create(driveFile).Media(zipFile, googleapi.ContentType("text/x-sql")).Do()
 	if err != nil {
 		log.Fatal(err)
 	}
