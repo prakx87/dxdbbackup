@@ -24,24 +24,28 @@ var wg = sync.WaitGroup{}
 func main() {
 	fmt.Println("DX DB Backup Script")
 
-	// 1. List DBs for backups excluding default DBs
-	databases := getDbList()
+	// // 1. List DBs for backups excluding default DBs
+	// databases := getDbList()
 
-	// 2. Take DB dumps of mysql databases
-	dumpList := takeDump(databases)
+	// // 2. Take DB dumps of mysql databases
+	// dumpList := takeDump(databases)
 
-	// 3. Upload the DB dumps to Google Drive
-	wg.Add(len(dumpList))
-	for _, dumpPath := range dumpList {
-		go uploadToCloud(dumpPath)
-	}
+	// // 3. Upload the DB dumps to Google Drive
+	// wg.Add(len(dumpList))
+	// for _, dumpPath := range dumpList {
+	// 	go uploadToCloud(dumpPath)
+	// }
 
 	// 4. Cleanup older dumps
 	retentionTime := "15m"
-	// cleanOldLocalDumps(retentionTime)
-	cleanOldCloudDumps(retentionTime)
+	retention, err := time.ParseDuration(retentionTime)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// cleanOldLocalDumps(&retention)
+	cleanOldCloudDumps(&retention)
 
-	wg.Wait()
+	// wg.Wait()
 }
 
 func getDbList() []string {
@@ -163,12 +167,8 @@ func uploadToCloud(dumpPath string) {
 	wg.Done()
 }
 
-func cleanOldLocalDumps(retentionTime string) {
+func cleanOldLocalDumps(retention *time.Duration) {
 	// Get list of backups older than retention time
-	retention, err := time.ParseDuration(retentionTime)
-	if err != nil {
-		log.Fatal(err)
-	}
 	fmt.Printf("Retention Time: %v\n", retention)
 
 	backupList, err := os.ReadDir("backups")
@@ -184,9 +184,9 @@ func cleanOldLocalDumps(retentionTime string) {
 		}
 		fmt.Printf("Name: %v, Info: %v\n", backup.Name(), backupInfo.ModTime())
 
-		backupAge := time.Since(backupInfo.ModTime())
-		fmt.Printf("Backup Age: %v\n", backupAge.Abs())
-		if backupAge > retention {
+		backupAge := time.Since(backupInfo.ModTime()).Hours()
+		fmt.Printf("Backup Age in Hrs: %v\n", backupAge)
+		if backupAge > retention.Hours() {
 			err := os.Remove("backups/" + backup.Name())
 			if err != nil {
 				log.Fatal(err)
@@ -194,10 +194,10 @@ func cleanOldLocalDumps(retentionTime string) {
 			fmt.Printf("File %v is deleted.\n", backup.Name())
 		}
 	}
-	fmt.Printf("cleaned backups older than %v.\n", retentionTime)
+	fmt.Printf("cleaned backups older than %v Hrs.\n", retention)
 }
 
-func cleanOldCloudDumps(retentionTime string) {
+func cleanOldCloudDumps(retention *time.Duration) {
 	// Get list of backups older than retention time
 	srv, err := drive.NewService(
 		context.Background(),
@@ -207,15 +207,36 @@ func cleanOldCloudDumps(retentionTime string) {
 		log.Fatalf("Unable to retrieve Drive client: %v", err)
 	}
 
-	backupFiles, err := srv.Files.List().OrderBy("createdTime").Do()
+	backupFiles, err := srv.Files.List().PageSize(1000).Fields("files(id, name, createdTime, parents)").Do()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, file := range backupFiles.Files {
-		fmt.Printf("Filename: %v, Created on: %v\n", file.Name, file.ImageMediaMetadata)
+	for _, backupFile := range backupFiles.Files {
+		fmt.Printf("Filename: %v, Created on: %v\n", backupFile.Name, backupFile.Parents)
+		createdTime, err := time.Parse(time.RFC3339, backupFile.CreatedTime)
+		if err != nil {
+			log.Fatal(err)
+		}
+		backupAge := time.Since(createdTime).Hours()
+		fmt.Printf("Backup Age in Hrs: %v\n", backupAge)
+
+		if (backupAge > retention.Hours()) && (slices.Contains(backupFile.Parents, "0B6VheyHPSfoJRjMwbERBdW52ZTQ")) {
+			// if backupFile.MimeType !=
+			// err := srv.Files.Delete(backupFile.Id).Do()
+			// if err != nil {
+			// 	log.Fatal(err)
+			// }
+			fmt.Printf("File %v is deleted.\n", backupFile.Name)
+		}
+
+		// if err := srv.Files.EmptyTrash().Do(); err != nil {
+		// 	log.Fatal(err)
+		// }
 	}
 
+	fmt.Printf("No of Backup Files: %v\n", len(backupFiles.Files))
+
 	// Delete those backups
-	fmt.Printf("cleaned backups older than %v.\n", retentionTime)
+	fmt.Printf("cleaned backups older than %v Hrs.\n", retention)
 }
