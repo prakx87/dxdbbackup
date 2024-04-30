@@ -29,7 +29,7 @@ func main() {
 	databases := getDbList()
 
 	// Steps 2 & 3
-	wg.Add(len(databases))
+	wg.Add(len(databases) + 2)
 	for _, database := range databases {
 		go func(database string) {
 			// 2. Take DB dump of mysql database
@@ -45,10 +45,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cleanOldLocalDumps(&retention)
-	cleanOldCloudDumps(&retention)
+	go cleanOldLocalDumps(&retention)
+	go cleanOldCloudDumps(&retention)
 
-	// wg.Wait()
+	wg.Wait()
 }
 
 func getDbList() []string {
