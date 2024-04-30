@@ -22,7 +22,6 @@ go.work
 
 # Dump files
 dump_*.sql
-dump_*.sql.gz
 
 # Service Account Key
 balmy-moonlight-196910-348c8ecd1dca.json
