@@ -1,6 +1,6 @@
 # dxdbbackup
-MySQL Dumper &amp; Cloud Uploader Script
 
+MySQL Dumper &amp; Cloud Uploader Script
 
 ## Steps
 
