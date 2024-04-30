@@ -28,19 +28,16 @@ func main() {
 	// 1. List DBs for backups excluding default DBs
 	databases := getDbList()
 
-	// Steps 2 to 4
+	// Steps 2 & 3
 	wg.Add(len(databases))
 	for _, database := range databases {
 		go func(database string) {
 			// 2. Take DB dump of mysql database
-			dumpPath := takeDump(database)
-			// 3. Zip the DB Dump
-			zipPath := zipDumpFile(dumpPath)
-			// 4. Upload the DB dumps to Google Drive
+			zipPath := takeDump(database)
+			// 3. Upload the DB dumps to Google Drive
 			uploadToCloud(zipPath)
 		}(database)
 	}
-	wg.Wait()
 
 	// 5. Cleanup older dumps
 	retentionTime := "15m"
@@ -50,6 +47,8 @@ func main() {
 	}
 	cleanOldLocalDumps(&retention)
 	cleanOldCloudDumps(&retention)
+
+	// wg.Wait()
 }
 
 func getDbList() []string {
@@ -103,15 +102,18 @@ func takeDump(database string) string {
 		}
 	}
 
-	dumpName := fmt.Sprintf("dump_%s.sql", time.Now().Format("2006-01-02-150405"))
-	dumpPath := fmt.Sprintf(backupFolder + "/" + dumpName)
-	dumpFile, err := os.Create(dumpPath)
+	zipName := fmt.Sprintf("dump_%s.sql.gz", time.Now().Format("2006-01-02-150405"))
+	zipPath := fmt.Sprintf(backupFolder + "/" + zipName)
+	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// Close the dump file after dump is completed
+	defer zipFile.Close()
+
 	// Create new Writer to write to Dump file
-	wDumpFile := bufio.NewWriter(dumpFile)
+	wDumpFile := gzip.NewWriter(zipFile)
 	// Create new scanner to read from Stdout io pipe
 	scanner := bufio.NewScanner(stdOut)
 
@@ -122,37 +124,15 @@ func takeDump(database string) string {
 
 	// Read each line from scanner and write the each line (string) to file
 	for scanner.Scan() {
-		if _, err := wDumpFile.WriteString(scanner.Text() + "\n"); err != nil {
+		_, err := wDumpFile.Write([]byte(scanner.Text() + "\n"))
+		if err != nil {
 			log.Fatal(err)
 		}
 	}
+	wDumpFile.Flush()
+	wDumpFile.Close()
 
-	// Close the dump file after dump is completed
-	dumpFile.Close()
-
-	return dumpPath
-}
-
-func zipDumpFile(dumpPath string) string {
-	fmt.Printf("Zipping File: %v\n", dumpPath)
-	dumpData, err := os.ReadFile(dumpPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	zipPath := fmt.Sprintf(dumpPath + ".gz")
-	zipFile, err := os.Create(zipPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer zipFile.Close()
-
-	wZipFile := gzip.NewWriter(zipFile)
-	if _, err := wZipFile.Write(dumpData); err != nil {
-		log.Fatal(err)
-	}
-	wZipFile.Flush()
-	wZipFile.Close()
+	fmt.Printf("Created Zipped Dump file: %v\n", zipPath)
 
 	return zipPath
 }
