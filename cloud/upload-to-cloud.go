@@ -5,13 +5,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 )
 
-func UploadToCloud(srv drive.Service, zipPath string, wg *sync.WaitGroup) {
+func UploadToCloud(srv drive.Service, zipPath string) {
 
 	zipFile, err := os.Open(zipPath)
 	if err != nil {
@@ -34,6 +33,4 @@ func UploadToCloud(srv drive.Service, zipPath string, wg *sync.WaitGroup) {
 		log.Fatal(err)
 	}
 	fmt.Printf("%v\n", fileResult)
-
-	defer wg.Done()
 }

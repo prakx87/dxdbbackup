@@ -37,7 +37,8 @@ func main() {
 			// 2. Take DB dump of mysql database
 			zipPath := local.TakeDump(database)
 			// 3. Upload the DB dumps to Google Drive
-			cloud.UploadToCloud(*srv, zipPath, &wg)
+			cloud.UploadToCloud(*srv, zipPath)
+			wg.Done()
 		}(database)
 	}
 
