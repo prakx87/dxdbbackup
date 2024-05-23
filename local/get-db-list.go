@@ -9,9 +9,17 @@ import (
 	"strings"
 )
 
-func GetDbList() []string {
+type Dbcreds struct {
+	db       string
+	host     string
+	user     string
+	password string
+	port     uint16
+}
+
+func GetDbList(dbCreds *Dbcreds) []string {
 	// mysql -h 127.0.0.1 -u root -pmy-secret-pw -e 'show databases;'
-	cmd := exec.Command("/usr/bin/mysql", "-h", "127.0.0.1", "-uroot", "-pmy-secret-pw")
+	cmd := exec.Command("/usr/bin/mysql", "-h", dbCreds.host, "-u", dbCreds.user, "-pmy-secret-pw")
 
 	query := strings.NewReader("show databases;")
 	cmd.Stdin = query

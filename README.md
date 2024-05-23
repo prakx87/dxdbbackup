@@ -8,3 +8,4 @@ MySQL Dumper &amp; Cloud Uploader Script
 2. Take DB dumps of mysql databases
 3. Upload the DB dumps to Google Drive
 4. Cleanup older dumps
+5. Use interface to add option to upload to multiple cloud storages
