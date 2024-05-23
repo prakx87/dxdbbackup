@@ -29,13 +29,13 @@ var backupCmd = &cobra.Command{
 
 func init() {
 
-	dbCreds := local.Dbcreds{}
+	var dbCreds local.Dbcreds
 
-	backupCmd.Flags().StringVarP(dbCreds.db, "database", "d", "mysql", "DB Name")
-	backupCmd.Flags().StringVarP(dbCreds.host, "host", "H", "localhost", "DB Hostname")
-	backupCmd.Flags().StringVarP(&dbCreds.user, "user", "u", "", "DB User")
-	backupCmd.Flags().StringVarP(&dbCreds.password, "password", "p", "", "DB Password")
-	backupCmd.Flags().Uint16VarP(&dbCreds.port, "port", "P", 3306, "DB Port")
+	backupCmd.Flags().StringVarP(&dbCreds.Db, "database", "d", "mysql", "DB Name")
+	backupCmd.Flags().StringVarP(&dbCreds.Host, "host", "H", "localhost", "DB Hostname")
+	backupCmd.Flags().StringVarP(&dbCreds.User, "user", "u", "", "DB User")
+	backupCmd.Flags().StringVarP(&dbCreds.Password, "password", "p", "", "DB Password")
+	backupCmd.Flags().Uint16VarP(&dbCreds.Port, "port", "P", 3306, "DB Port")
 
 	srv, err := drive.NewService(
 		context.Background(),

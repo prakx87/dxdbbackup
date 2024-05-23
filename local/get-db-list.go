@@ -10,16 +10,16 @@ import (
 )
 
 type Dbcreds struct {
-	db       string
-	host     string
-	user     string
-	password string
-	port     uint16
+	Db       string
+	Host     string
+	User     string
+	Password string
+	Port     uint16
 }
 
 func GetDbList(dbCreds *Dbcreds) []string {
 	// mysql -h 127.0.0.1 -u root -pmy-secret-pw -e 'show databases;'
-	cmd := exec.Command("/usr/bin/mysql", "-h", dbCreds.host, "-u", dbCreds.user, "-pmy-secret-pw")
+	cmd := exec.Command("/usr/bin/mysql", "-h", dbCreds.Host, "-u", dbCreds.User, "-pmy-secret-pw")
 
 	query := strings.NewReader("show databases;")
 	cmd.Stdin = query
